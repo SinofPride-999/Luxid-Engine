@@ -46,6 +46,8 @@ class MakeActionCommand extends Command
 <?php
 namespace {$namespace};
 
+use Luxid\Foundation\Action;
+
 class {$className} extends Action
 {
     /**

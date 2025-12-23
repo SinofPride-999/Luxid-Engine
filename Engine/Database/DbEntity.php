@@ -9,6 +9,14 @@ use Luxid\Foundation\Application;
  * Base Active Record Class (extends Luxid\ORM\Entity)
  * This would be an entity which would be like an ORM
  * and would map the User's Entity into the Database Table.
+ *
+ * @property int $id The primary key
+ * @method bool save() Save the entity
+ * @method bool update() Update the entity
+ * @method bool delete() Delete the entity
+ * @method static static|null findOne(array $where) Find one entity
+ * @method static array findAll(array $where = [], string $orderBy = '') Find all entities
+ * @method static static|null find(int $id) Find by ID
  */
 abstract class DbEntity extends Entity
 {
