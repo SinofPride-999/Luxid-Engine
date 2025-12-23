@@ -6,9 +6,11 @@
     "keywords": ["framework", "php", "luxid", "mvc"],
     "autoload": {
         "psr-4": {
-            "Luxid\\": "Engine/"
+            "Luxid\\": "Engine/",
+            "Luxid\\Console\\": "Engine/Console/"
         }
     },
+    "bin": ["juice"],
     "authors": [
         {
             "name": "Jhay",
