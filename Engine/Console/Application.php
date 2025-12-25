@@ -58,7 +58,7 @@ class Application
         ];
     }
 
-    public function run(array $argv = null): int
+    public function run(?array $argv = null): int
     {
         $argv = $argv ?? $_SERVER['argv'];
         $commandName = $argv[1] ?? null;
