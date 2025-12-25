@@ -73,7 +73,7 @@ class FreshCommand extends Command
     {
         $migrateCommand = new MigrateCommand();
         $argv = ['juice', 'db:migrate', '--fresh'];
-        return $migrateCommand->handle($argv);
+        $migrateCommand->handle($argv);
     }
 
     private function runSeeders(): void
