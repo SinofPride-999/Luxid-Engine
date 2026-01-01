@@ -37,7 +37,14 @@ abstract class DbEntity extends Entity
         ");
 
         foreach ($attributes as $attribute) {
-            $statement->bindValue(":$attribute", $this->{$attribute});
+            $value = $this->{$attribute} ?? null;
+
+            // Normalize booleans for MySQL
+            if (is_bool($value)) {
+                $value = $value ? 1 : 0;
+            }
+
+            $statement->bindValue(":$attribute", $value);
         }
 
         $statement->execute();
