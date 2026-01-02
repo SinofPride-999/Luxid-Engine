@@ -13,6 +13,12 @@ class Route
      */
     public static function make(string $name): RouteBuilder
     {
+        if (!isset(Application::$app) || Application::$app === null) {
+            throw new \RuntimeException(
+                'Application not initialized. Make sure to create an Application instance before defining routes.'
+            );
+        }
+
         $router = Application::$app->router;
         return new RouteBuilder($router, $name);
     }

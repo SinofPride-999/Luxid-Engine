@@ -16,7 +16,7 @@ class RoutesCommand extends Command
         $this->line("🛣️  Registered Routes");
         $this->line(str_repeat("─", 80));
 
-        $routes = $this->loadRoutesFromRouter();
+        $routes = $this->loadRoutesSafely();
 
         if (empty($routes)) {
             $this->warning("No routes found");
@@ -40,6 +40,208 @@ class RoutesCommand extends Command
         $this->info("Total: " . count($routes) . " route(s)");
 
         return 0;
+    }
+
+    private function loadRoutesSafely(): array
+    {
+        $routes = [];
+        $routesFile = $this->getRoutesPath() . '/api.php';
+
+        if (!file_exists($routesFile)) {
+            return $routes;
+        }
+
+        try {
+            // First, ensure autoloader is loaded
+            $autoloadFile = $this->getProjectRoot() . '/vendor/autoload.php';
+            if (!file_exists($autoloadFile)) {
+                $this->warning("Composer autoloader not found. Run: composer install");
+                return [];
+            }
+
+            require_once $autoloadFile;
+
+            // Load environment variables if .env exists
+            $envFile = $this->getProjectRoot() . '/.env';
+            if (file_exists($envFile)) {
+                $dotenv = \Dotenv\Dotenv::createImmutable($this->getProjectRoot());
+                $dotenv->safeLoad();
+            }
+
+            // Try to load the config file
+            $configFile = $this->getConfigPath() . '/config.php';
+            $config = [];
+
+            if (file_exists($configFile)) {
+                $config = require $configFile;
+            }
+
+            // Use a mock database config for CLI
+            $config['db'] = [
+                'dsn' => 'mysql:host=127.0.0.1;dbname=test',
+                'user' => 'root',
+                'password' => ''
+            ];
+
+            // Set a default userClass if not specified
+            if (!isset($config['userClass'])) {
+                $config['userClass'] = 'App\Models\User';
+            }
+
+            // IMPORTANT: Initialize Application::$app before requiring routes
+            // We'll use a custom Application class that doesn't connect to DB immediately
+            $this->initializeApplicationForCli($config);
+
+            // Now load the routes file
+            require $routesFile;
+
+            // Get routes from the global Application instance
+            if (isset(Application::$app) && Application::$app !== null) {
+                $routerRoutes = Application::$app->router->getRoutesForInspection();
+
+                // Format routes for display
+                foreach ($routerRoutes as $routerRoute) {
+                    $callback = $routerRoute['callback'];
+                    $middleware = $routerRoute['middleware'];
+
+                    // Format the handler for display
+                    $handler = $this->formatHandler($callback);
+
+                    // Format middleware for display
+                    $middlewareInfo = $this->formatMiddleware($middleware);
+
+                    $routes[] = [
+                        'method' => strtoupper($routerRoute['method']),
+                        'path' => $routerRoute['path'],
+                        'handler' => $handler,
+                        'middleware' => $middlewareInfo
+                    ];
+                }
+            }
+
+            // Sort routes by path for better readability
+            usort($routes, function($a, $b) {
+                return strcmp($a['path'], $b['path']);
+            });
+
+        } catch (\Exception $e) {
+            $this->warning("Error loading routes: " . $e->getMessage());
+            $this->line("Trying fallback parsing...");
+
+            // Try fallback file parsing
+            $routes = $this->parseRoutesFromFile($routesFile);
+        }
+
+        return $routes;
+    }
+
+    /**
+     * Initialize Application for CLI without database connection
+     */
+    private function initializeApplicationForCli(array $config): void
+    {
+        // Create a custom Application class for CLI
+        if (!class_exists('Luxid\Foundation\CliApplication', false)) {
+            class CliApplication extends Application
+            {
+                // Override the typed properties to be nullable
+                public ?\Luxid\Database\Database $db = null;
+                public ?\Luxid\Database\DbEntity $user = null;
+
+                public function __construct($rootPath, array $config)
+                {
+                    $this->userClass = $config['userClass'];
+
+                    self::$ROOT_DIR = $rootPath;
+                    self::$app = $this;
+
+                    $this->request = new \Luxid\Http\Request();
+                    $this->response = new \Luxid\Http\Response();
+
+                    // Create null session for CLI
+                    $this->session = new \Luxid\Http\NullSession();
+
+                    $this->router = new \Luxid\Routing\Router($this->request, $this->response);
+                    $this->screen = new \Luxid\Foundation\Screen();
+
+                    // Don't initialize database for CLI - keep as null
+                    // $this->db and $this->user remain null
+                }
+
+                // Override any methods that might use $db
+                public static function isGuest(): bool
+                {
+                    // In CLI mode, always return true (guest)
+                    return true;
+                }
+
+                public function login(\Luxid\Database\DbEntity $user): bool
+                {
+                    // No-op in CLI
+                    return true;
+                }
+
+                public function logout(): void
+                {
+                    // No-op in CLI
+                }
+            }
+        }
+
+        // Create the application instance
+        new CliApplication($this->getProjectRoot(), $config);
+    }
+
+
+    /**
+     * Fallback: Parse routes directly from file
+     */
+    private function parseRoutesFromFile(string $routesFile): array
+    {
+        $routes = [];
+        $content = file_get_contents($routesFile);
+
+        // Look for route() calls
+        preg_match_all('/route\(["\']([^"\']+)["\']\)\s*->([^;]+);/s', $content, $matches, PREG_SET_ORDER);
+
+        foreach ($matches as $match) {
+            $name = $match[1];
+            $chain = $match[2];
+
+            // Extract method and path
+            if (preg_match('/->(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)/', $chain, $methodMatch)) {
+                $method = strtoupper($methodMatch[1]);
+                $path = $methodMatch[2];
+
+                // Extract uses
+                if (preg_match('/->uses\(([^,]+),\s*["\']([^"\']+)["\']\)/', $chain, $usesMatch)) {
+                    $action = trim($usesMatch[1]);
+                    $actionMethod = $usesMatch[2];
+
+                    // Check if has auth/open
+                    $hasAuth = strpos($chain, '->auth()') !== false ||
+                               strpos($chain, '->secure()') !== false;
+                    $hasOpen = strpos($chain, '->open(') !== false ||
+                               strpos($chain, '->public()') !== false;
+
+                    $middleware = 'None';
+                    if ($hasAuth) {
+                        $middleware = 'AuthMiddleware';
+                    } elseif ($hasOpen) {
+                        $middleware = 'PublicMiddleware';
+                    }
+
+                    $routes[] = [
+                        'method' => $method,
+                        'path' => $path,
+                        'handler' => '[' . $action . '::class, \'' . $actionMethod . '\']',
+                        'middleware' => $middleware
+                    ];
+                }
+            }
+        }
+
+        return $routes;
     }
 
     private function loadRoutesFromRouter(): array

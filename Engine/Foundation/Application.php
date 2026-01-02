@@ -21,8 +21,8 @@ class Application
     public SessionInterface $session;
     public static Application $app;
     public ?Action $action = null;
-    public Database $db;
-    public ?DbEntity $user;
+    public ?Database $db = null; 
+    public ?DbEntity $user = null;
     public Screen $screen;
 
     public function __construct($rootPath, array $config)
@@ -45,7 +45,12 @@ class Application
 
         $this->router = new Router($this->request, $this->response);
         $this->screen = new Screen();
-        $this->db = new Database($config['db']);
+
+        // Initialize database only if config has db settings
+        if (isset($config['db'])) {
+            $this->db = new Database($config['db']);
+        }
+
         $this->user = null;
 
         // Only check session for user if session exists and is started

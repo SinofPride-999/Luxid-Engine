@@ -3,6 +3,7 @@
 
 use Luxid\Foundation\Application;
 use Luxid\Routing\RouteBuilder;
+use Luxid\Routing\Router;
 
 if (!function_exists('route')) {
     /**
@@ -10,6 +11,13 @@ if (!function_exists('route')) {
      */
     function route(string $name): RouteBuilder
     {
+        // Check if Application::$app is initialized
+        if (!isset(Application::$app) || Application::$app === null) {
+            throw new \RuntimeException(
+                'Application not initialized. Make sure to create an Application instance before defining routes.'
+            );
+        }
+
         $router = Application::$app->router;
         return new RouteBuilder($router, $name);
     }
