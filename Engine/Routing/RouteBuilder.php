@@ -174,6 +174,15 @@ class RouteBuilder
     }
 
     /**
+     * Force route registration (for CLI commands)
+     */
+    public function register(): self
+    {
+        $this->registerRouteIfNeeded();
+        return $this;
+    }
+
+    /**
      * Register the route with the router
      */
     private function registerRouteIfNeeded(): void
@@ -204,8 +213,9 @@ class RouteBuilder
             }
         }
 
-        // Enforce security configuration
-        if (!$this->securityConfigured) {
+        // For CLI commands, allow routes without explicit security
+        $isCli = php_sapi_name() === 'cli';
+        if (!$this->securityConfigured && !$isCli) {
             throw new \RuntimeException(
                 sprintf(
                     'Route "%s" must explicitly declare security with secure() or open()',
