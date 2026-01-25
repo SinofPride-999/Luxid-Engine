@@ -73,38 +73,4 @@ trait ActionHelpers
     {
         return Application::isGuest();
     }
-
-    /**
-     * Send JSON response
-     */
-    protected function json($data, int $statusCode = 200): string
-    {
-        $this->response()->setStatusCode($statusCode);
-        header('Content-Type: application/json');
-        return json_encode($data, JSON_PRETTY_PRINT);
-    }
-
-    /**
-     * Send successful JSON response
-     */
-    protected function success($data = null, string $message = 'Success', int $statusCode = 200): string
-    {
-        return $this->json([
-            'success' => true,
-            'message' => $message,
-            'data' => $data
-        ], $statusCode);
-    }
-
-    /**
-     * Send error JSON response
-     */
-    protected function error(string $message = 'Error', $errors = null, int $statusCode = 400): string
-    {
-        return $this->json([
-            'success' => false,
-            'message' => $message,
-            'errors' => $errors
-        ], $statusCode);
-    }
 }

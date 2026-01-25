@@ -5,8 +5,15 @@ namespace Luxid\Http;
 class Request
 {
     /**
-     * Get the request path without query parameters
+     * @var array|null Cached request body to avoid repeated parsing
      */
+    private ?array $cachedBody = null;
+
+    /**
+     * @var array|null Cached query parameters
+     */
+    private ?array $cachedQuery = null;
+
     public function getPath()
     {
         $path = $_SERVER["REQUEST_URI"] ?? '/';
@@ -19,9 +26,6 @@ class Request
         return substr($path, 0, $position);
     }
 
-     /**
-     * Get the HTTP request method
-     */
     public function method()
     {
         // Support method override via _method parameter
@@ -40,11 +44,25 @@ class Request
         return $method;
     }
 
-     /**
-     * Get all request data with automatic sanitization
+    /**
+     * Get all request data with automatic sanitization and caching
+     *
+     * Handles different request types:
+     * - GET requests: Returns sanitized $_GET data
+     * - POST requests: Returns sanitized $_POST or JSON data
+     * - PUT/PATCH/DELETE: Parses raw input (form or JSON)
+     *
+     * @return array Associative array of request data
+     *
+     * Note: Results are cached to avoid repeated parsing of php://input
      */
     public function getBody()
     {
+        // Return cached result if available
+        if ($this->cachedBody !== null) {
+            return $this->cachedBody;
+        }
+
         $body = [];
         $method = $this->method();
 
@@ -88,7 +106,18 @@ class Request
             }
         }
 
+        // Cache the result
+        $this->cachedBody = $body;
+
         return $body;
+    }
+
+    /**
+     * Clear the cached request body (useful for testing)
+     */
+    public function clearCache(): void
+    {
+        $this->cachedBody = null;
     }
 
     // Utility Methods (helpers) ================
@@ -131,6 +160,15 @@ class Request
 
     /**
      * Get input value by key
+     *
+     * @param string $key The parameter name to retrieve
+     * @param mixed $default Default value if key doesn't exist
+     * @return mixed The parameter value or default
+     *
+     * Example:
+     * - Request: GET /api/todos?status=pending
+     * - $request->get('status') returns 'pending'
+     * - $request->get('search', 'default') returns 'default'
      */
     public function get(string $key, $default = null)
     {
@@ -140,6 +178,14 @@ class Request
 
     /**
      * Get all input data
+     *
+     * Alias for getBody() for consistency with other frameworks
+     *
+     * @return array All request parameters
+     *
+     * Example:
+     * - Request: GET /api/todos?status=pending&search=work
+     * - Returns: ['status' => 'pending', 'search' => 'work']
      */
     public function all(): array
     {
@@ -147,7 +193,14 @@ class Request
     }
 
     /**
-     * Get only specific keys
+     * Get only specific keys from request data
+     *
+     * @param array $keys Array of keys to retrieve
+     * @return array Associative array with only specified keys
+     *
+     * Example:
+     * - Request data: ['title' => 'Todo', 'status' => 'pending', 'extra' => 'data']
+     * - $request->only(['title', 'status']) returns ['title' => 'Todo', 'status' => 'pending']
      */
     public function only(array $keys): array
     {
@@ -164,7 +217,15 @@ class Request
     }
 
     /**
-     * Check if input has key
+     * Check if request contains a specific key
+     *
+     * @param string $key The parameter name to check
+     * @return bool True if key exists in request data
+     *
+     * Example:
+     * - Request: GET /api/todos?status=pending
+     * - $request->has('status') returns true
+     * - $request->has('search') returns false
      */
     public function has(string $key): bool
     {
@@ -172,4 +233,67 @@ class Request
         return isset($body[$key]);
     }
 
+    /**
+     * Get query parameters (GET requests only)
+     *
+     * This method is specifically for query string parameters
+     * Unlike getBody() which merges everything, this only returns $_GET data
+     *
+     * @param string $key The query parameter name
+     * @param mixed $default Default value if key doesn't exist
+     * @return mixed The query parameter value or default
+     *
+     * Example:
+     * - URL: /api/todos?status=pending&page=2
+     * - $request->query('status') returns 'pending'
+     * - $request->query('sort', 'created_at') returns 'created_at'
+     */
+    public function query(string $key = null, $default = null)
+    {
+        if ($this->cachedQuery === null) {
+            $this->cachedQuery = [];
+            foreach ($_GET as $key => $value) {
+                $this->cachedQuery[$key] = filter_input(INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS);
+            }
+        }
+
+        if ($key === null) {
+            return $this->cachedQuery;
+        }
+
+        return $this->cachedQuery[$key] ?? $default;
+    }
+
+    /**
+     * Get POST/PUT/PATCH input data (not including query parameters)
+     *
+     * This method returns only the request body data, not query string parameters
+     * Useful when you want to separate query params from body content
+     *
+     * @param string $key The input parameter name
+     * @param mixed $default Default value if key doesn't exist
+     * @return mixed The input value or default
+     *
+     * Example for POST request:
+     * - Body: {"title": "Todo", "status": "pending"}
+     * - $request->input('title') returns 'Todo'
+     */
+    public function input(string $key = null, $default = null)
+    {
+        $body = $this->getBody();
+
+        // For GET requests, input() should return empty (use query() instead)
+        if ($this->isGet()) {
+            if ($key === null) {
+                return [];
+            }
+            return $default;
+        }
+
+        if ($key === null) {
+            return $body;
+        }
+
+        return $body[$key] ?? $default;
+    }
 }

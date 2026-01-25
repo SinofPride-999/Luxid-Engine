@@ -2,6 +2,8 @@
 
 namespace Luxid\Http;
 
+use Luxid\Foundation\Application;
+
 class Response
 {
     public function setStatusCode(int $code)
@@ -46,5 +48,16 @@ class Response
             'message' => $message,
             'errors' => $errors
         ], $statusCode);
+    }
+
+    /**
+     * Redirect with flash message
+     */
+    public function redirectWith(string $url, string $key, string $message)
+    {
+        if (Application::$app) {
+            Application::$app->session->setFlash($key, $message);
+        }
+        $this->warp($url);
     }
 }
