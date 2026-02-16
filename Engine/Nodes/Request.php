@@ -1,6 +1,6 @@
 <?php
 
-namespace Luxid\Facades;
+namespace Luxid\Nodes;
 
 use Luxid\Foundation\Application;
 use Luxid\Http\Request as HttpRequest;

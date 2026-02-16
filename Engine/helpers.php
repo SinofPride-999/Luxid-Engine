@@ -2,7 +2,7 @@
 
 use Luxid\Foundation\Application;
 use Luxid\Routing\RouteBuilder;
-use Luxid\Routing\Router;
+use Luxid\Nodes\Route;
 
 if (!function_exists('route')) {
     /**
@@ -29,6 +29,6 @@ if (!function_exists('route_group')) {
      */
     function route_group(array $options, callable $callback): void
     {
-        \Luxid\Facades\Route::group($options, $callback);
+        Route::group($options, $callback);
     }
 }

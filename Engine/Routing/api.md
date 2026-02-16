@@ -5,7 +5,7 @@
 use Luxid\Middleware\LoggingMiddleware;
 use App\Actions\TodoAction;
 use App\Actions\AuthAction;
-use Luxid\Facades\Route;
+use Luxid\Nodes\Route;
 use Luxid\Middleware\RateLimitMiddleware;
 use Luxid\Middleware\CsrfMiddleware;
 
