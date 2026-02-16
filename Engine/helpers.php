@@ -1,5 +1,4 @@
 <?php
-// Engine/helpers.php
 
 use Luxid\Foundation\Application;
 use Luxid\Routing\RouteBuilder;
