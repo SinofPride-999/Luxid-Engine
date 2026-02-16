@@ -461,8 +461,16 @@ class Router
             $callback = $route['callback'];
         }
 
-        foreach ($this->globalMiddleware as $middleware) {
-            $middleware->execute();
+        // Determine if this is an API request
+        $isApiRequest = strpos($path, '/api/') === 0 ||
+                    (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false) ||
+                    (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false);
+
+        // Only run global middleware for API routes
+        if ($isApiRequest) {
+            foreach ($this->globalMiddleware as $middleware) {
+                $middleware->execute();
+            }
         }
 
         // Use pre-flattened middleware for performance
