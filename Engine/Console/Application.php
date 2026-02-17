@@ -27,10 +27,12 @@ use Luxid\Console\Commands\{
 class Application
 {
     private array $commands = [];
+    private array $packageCommands = [];
 
     public function __construct()
     {
         $this->registerCommands();
+        $this->discoverPackageCommands();
     }
 
     private function registerCommands(): void
@@ -58,12 +60,41 @@ class Application
         ];
     }
 
+    /**
+     * Discover commands from installed packages
+     */
+    private function discoverPackageCommands(): void
+    {
+        $vendorDir = dirname(__DIR__, 2) . '/vendor';
+        $installedPath = $vendorDir . '/composer/installed.json';
+
+        if (!file_exists($installedPath)) {
+            return;
+        }
+
+        $installed = json_decode(file_get_contents($installedPath), true);
+        $packages = $installed['packages'] ?? $installed;
+
+        foreach ($packages as $package) {
+            if (isset($package['extra']['luxid']['commands'])) {
+                foreach ($package['extra']['luxid']['commands'] as $name => $commandClass) {
+                    if (class_exists($commandClass)) {
+                        $this->packageCommands[$name] = $commandClass;
+                    }
+                }
+            }
+        }
+    }
+
     public function run(?array $argv = null): int
     {
         $argv = $argv ?? $_SERVER['argv'];
         $commandName = $argv[1] ?? null;
 
-        // Normailize common flags
+        // Merge core commands with package commands
+        $allCommands = array_merge($this->commands, $this->packageCommands);
+
+        // Normalize common flags
         if (in_array($commandName, ['--version', '-V'], true)) {
             $commandName = 'version';
         }
@@ -74,29 +105,30 @@ class Application
 
         // Show interactive menu if no command
         if ($commandName === null) {
-            return $this->showInteractiveMenu();
+            return $this->showInteractiveMenu($allCommands);
         }
 
         // Show help if command doesn't exist
-        if (!isset($this->commands[$commandName])) {
+        if (!isset($allCommands[$commandName])) {
             $this->error("❌ Command not found: {$commandName}");
             $this->line("");
-            $this->showAvailableCommands();
+            $this->showAvailableCommands($allCommands);
             return 1;
         }
 
-        $commandClass = $this->commands[$commandName];
+        $commandClass = $allCommands[$commandName];
         $command = new $commandClass();
 
         return $command->handle($argv);
     }
 
-    private function showInteractiveMenu(): int
+    private function showInteractiveMenu(array $commands): int
     {
         $this->header();
         $this->line("🌊 Welcome to Juice CLI - Luxid Framework");
         $this->line("");
 
+        // Core menu items
         $menu = [
             ["🚀", "start", "Start development server"],
             ["🔄", "fresh", "Fresh install (clear, migrate, seed)"],
@@ -105,10 +137,23 @@ class Application
             ["", "", ""],
             ["🗄️", "db:*", "Database operations"],
             ["⚡", "make:*", "Generate code"],
+        ];
+
+        // Add package commands to menu
+        foreach ($commands as $name => $class) {
+            if (!isset($this->commands[$name]) && !str_starts_with($name, 'db:') && !str_starts_with($name, 'make:')) {
+                $cmdInstance = new $class();
+                $desc = $cmdInstance->getDescription();
+                $menu[] = ["📦", $name, $desc];
+            }
+        }
+
+        $menu = array_merge($menu, [
+            ["", "", ""],
             ["🔧", "env:check", "Validate environment"],
             ["ℹ️", "version", "Show version"],
             ["❓", "help", "Show help"],
-        ];
+        ]);
 
         foreach ($menu as $item) {
             if ($item[1] === '') {
@@ -126,7 +171,7 @@ class Application
         return 0;
     }
 
-    private function showAvailableCommands(): void
+    private function showAvailableCommands(array $commands): void
     {
         $this->line("📋 Available commands:");
         $this->line("");
@@ -134,17 +179,30 @@ class Application
         $categories = [
             'Server' => ['start'],
             'Application' => ['fresh', 'status', 'routes', 'env:check', 'version'],
-            'Database' => array_filter(array_keys($this->commands), fn($c) => str_starts_with($c, 'db:')),
-            'Make' => array_filter(array_keys($this->commands), fn($c) => str_starts_with($c, 'make:')),
-            'Help' => ['help'],
+            'Database' => array_filter(array_keys($commands), fn($c) => str_starts_with($c, 'db:')),
+            'Make' => array_filter(array_keys($commands), fn($c) => str_starts_with($c, 'make:')),
         ];
 
-        foreach ($categories as $category => $commands) {
-            if (empty($commands)) continue;
+        // Add package commands category
+        $packageCommands = array_filter(
+            array_keys($commands),
+            fn($c) => !isset($this->commands[$c]) &&
+                     !str_starts_with($c, 'db:') &&
+                     !str_starts_with($c, 'make:')
+        );
+
+        if (!empty($packageCommands)) {
+            $categories['Packages'] = $packageCommands;
+        }
+
+        $categories['Help'] = ['help'];
+
+        foreach ($categories as $category => $cmdList) {
+            if (empty($cmdList)) continue;
 
             $this->line("\033[1;34m{$category}:\033[0m");
-            foreach ($commands as $command) {
-                $commandClass = $this->commands[$command];
+            foreach ($cmdList as $command) {
+                $commandClass = $commands[$command];
                 $commandInstance = new $commandClass();
                 $description = $commandInstance->getDescription();
 
